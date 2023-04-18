@@ -1,5 +1,5 @@
 # MIE424_SGDHess
-This repository consists of the code for the MIE424 final project. 
+This repository consists of the code for the MIE424 final project. This code was collaborated on using Google Collab, and later shifted to Github for submission. Please reach out if there are any errors in running the code. 
 
 # Topic
 We implement the SGD with Hessian-corrected momentum optimizer algorithm. 
