@@ -3,6 +3,7 @@ import os
 import torch
 import torch.nn.functional as F
 from torch.optim import Adam, AdamW, SGD
+from sgdhess import SGDHess
 from model import QNetwork
 from policy import GaussianPolicy
 
@@ -19,37 +20,37 @@ def hard_update(target, source):
 class SAC(object):
     def __init__(self, num_inputs, action_space, args):
 
-        self.gamma = args["gamma"]
-        self.tau = args["tau"]
-        self.alpha = args["alpha"]
-        self.optimizer_class = args["optimizer_class"]
+        self.gamma = args.gamma
+        self.tau = args.tau
+        self.alpha = args.alpha
+        self.optimizer_class = args.optimizer_class
 
-        self.policy_type = args["policy"]
-        self.target_update_interval = args["target_update_interval"]
-        self.automatic_entropy_tuning = args["automatic_entropy_tuning"]
+        self.policy_type = args.policy
+        self.target_update_interval = args.target_update_interval
+        self.automatic_entropy_tuning = args.automatic_entropy_tuning
 
-        self.device = torch.device("cuda" if args["cuda"] else "cpu")
+        self.device = torch.device("cuda" if args.cuda else "cpu")
 
         dis_act = type(env.action_space) != gym.spaces.box.Box
 
         action_n = action_space.n if dis_act else action_space.shape[0]
         self.action_n = action_n
 
-        self.critic = QNetwork(num_inputs, action_n, args["hidden_size"]).to(device=self.device)
+        self.critic = QNetwork(num_inputs, action_n, args.hidden_size).to(device=self.device)
         
         #Vary optimizier class based on args.optimizer_class arg
         if self.optimizer_class == "SGDHess":
-          self.opt_c = SGDHess(self.critic.parameters(), momentum=0.9, clip=False, lr = args["lr"])
+          self.opt_c = SGDHess(self.critic.parameters(), momentum=0.9, clip=False, lr = args.lr)
         elif self.optimizer_class == "SGD":
-          self.opt_c = SGD(self.critic.parameters(), momentum=0.9, lr=args["lr"])
+          self.opt_c = SGD(self.critic.parameters(), momentum=0.9, lr=args.lr)
         elif self.optimizer_class == "Adam":
-          self.opt_c = Adam(self.critic.parameters(), lr=args["lr"])
+          self.opt_c = Adam(self.critic.parameters(), lr=args.lr)
         elif self.optimizer_class == "AdamW":
-          self.opt_c = AdamW(self.critic.parameters(), lr=args["lr"])
+          self.opt_c = AdamW(self.critic.parameters(), lr=args.lr)
         
         self.critic_optim = self.opt_c
 
-        self.critic_target = QNetwork(num_inputs, action_n, args["hidden_size"]).to(self.device)
+        self.critic_target = QNetwork(num_inputs, action_n, args.hidden_size).to(self.device)
         hard_update(self.critic_target, self.critic)
 
         # Target Entropy = −dim(A) (e.g. , -6 for HalfCheetah-v2) as given in the paper
@@ -58,17 +59,17 @@ class SAC(object):
             self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
             self.alpha_optim = Adam([self.log_alpha], lr=args["lr"])
 
-        self.policy = GaussianPolicy(num_inputs, action_n, args["hidden_size"], action_space, device=self.device).to(self.device)
+        self.policy = GaussianPolicy(num_inputs, action_n, args.hidden_size, action_space, device=self.device).to(self.device)
         
         #Vary optimizier class based on args.optimizer_class arg
         if self.optimizer_class == "SGDHess":
-          self.opt_p = SGDHess(self.policy.parameters(), momentum=0.9, clip=False, lr=args["lr"])
+          self.opt_p = SGDHess(self.policy.parameters(), momentum=0.9, clip=False, lr=args.lr])
         elif self.optimizer_class == "SGD":
-          self.opt_p = SGD(self.policy.parameters(), momentum=0.9, lr=args["lr"])
+          self.opt_p = SGD(self.policy.parameters(), momentum=0.9, lr=args.lr)
         elif self.optimizer_class == "Adam":
-          self.opt_p = Adam(self.policy.parameters(), lr=args["lr"])  
+          self.opt_p = Adam(self.policy.parameters(), lr=args.lr)  
         elif self.optimizer_class == "AdamW":
-          self.opt_p = AdamW(self.policy.parameters(), lr=args["lr"])
+          self.opt_p = AdamW(self.policy.parameters(), lr=args.lr)
         
         self.policy_optim = self.opt_p
 
@@ -141,36 +142,3 @@ class SAC(object):
             soft_update(self.critic_target, self.critic, self.tau)
 
         return qf1_loss.item(), qf2_loss.item(), policy_loss.item(), alpha_loss.item(), alpha_tlogs.item()
-
-    # Save model parameters
-    def save_checkpoint(self, env_name, suffix="", ckpt_path=None):
-        if not os.path.exists('checkpoints/'):
-            os.makedirs('checkpoints/')
-        if ckpt_path is None:
-            ckpt_path = "checkpoints/sac_checkpoint_{}_{}".format(env_name, suffix)
-        print('Saving models to {}'.format(ckpt_path))
-        torch.save({'policy_state_dict': self.policy.state_dict(),
-                    'critic_state_dict': self.critic.state_dict(),
-                    'critic_target_state_dict': self.critic_target.state_dict(),
-                    'critic_optimizer_state_dict': self.critic_optim.state_dict(),
-                    'policy_optimizer_state_dict': self.policy_optim.state_dict()}, ckpt_path)
-
-    # Load model parameters
-    def load_checkpoint(self, ckpt_path, evaluate=False):
-        print('Loading models from {}'.format(ckpt_path))
-        if ckpt_path is not None:
-            checkpoint = torch.load(ckpt_path)
-            self.policy.load_state_dict(checkpoint['policy_state_dict'])
-            self.critic.load_state_dict(checkpoint['critic_state_dict'])
-            self.critic_target.load_state_dict(checkpoint['critic_target_state_dict'])
-            self.critic_optim.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-            self.policy_optim.load_state_dict(checkpoint['policy_optimizer_state_dict'])
-
-            if evaluate:
-                self.policy.eval()
-                self.critic.eval()
-                self.critic_target.eval()
-            else:
-                self.policy.train()
-                self.critic.train()
-                self.critic_target.train()
