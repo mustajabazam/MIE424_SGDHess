@@ -1,5 +1,7 @@
 import argparse
 import datetime
+import mujoco_py
+import mujoco
 import gym
 import numpy as np
 import itertools
